@@ -6,7 +6,11 @@ import emoji
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from tensorflow.keras.models import load_model
+import tensorflow as tf
+from tensorflow.keras.layers import Input, Dense, Embedding, SpatialDropout1D, Bidirectional, LSTM, Concatenate, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 nltk.download('punkt', quiet=True)
@@ -44,11 +48,6 @@ def clean_arabic_text(text):
     
     return ' '.join(filtered_tokens)
 
-import tensorflow as tf
-from tensorflow.keras.layers import Input, Dense, Embedding, SpatialDropout1D, Bidirectional, LSTM, Concatenate, Dropout
-from tensorflow.keras.models import Model
-from tensorflow.keras.regularizers import l2
-
 @st.cache_resource
 def load_model_and_artifacts():
     tfidf_input = Input(shape=(10000,), name="tfidf_input")
@@ -72,14 +71,13 @@ def load_model_and_artifacts():
     output_probability = Dense(1, activation='sigmoid', kernel_regularizer=l2(0.01), name="binary_output")(drop_fusion)
 
     model = Model(inputs=[tfidf_input, seq_input], outputs=output_probability)
-    
     model.load_weights('optimized_hybrid_model.keras')
 
     with open('tfidf_vectorizer.pkl', 'rb') as f:
         vectorizer = pickle.load(f)
-    with open('sequence_tokenizer.pkl', 'rb') as f:
-        tokenizer = pickle.load(f)
         
+    tokenizer = Tokenizer(num_words=10000, oov_token="<OOV>")
+    
     return model, vectorizer, tokenizer
 
 model, vectorizer, tokenizer = load_model_and_artifacts()
@@ -89,7 +87,7 @@ st.write("أدخل نص التغريدة في المربع بالأسفل وسي
 
 user_input = st.text_area("نص التغريدة:", placeholder="اكتب تغريدتك هنا...", height=150)
 
-if st.button("تحليل التغريدة 🚀"):
+if st.button("تحليل التغريدة "):
     if user_input.strip() == "":
         st.warning("الرجاء إدخال نص أولاً!")
     else:
@@ -97,6 +95,8 @@ if st.button("تحليل التغريدة 🚀"):
             processed_text = clean_arabic_text(user_input)
             
             tfidf_features = vectorizer.transform([processed_text]).astype('float32').toarray()
+            
+            tokenizer.fit_on_texts([processed_text])
             seq_features = tokenizer.texts_to_sequences([processed_text])
             seq_padded = pad_sequences(seq_features, maxlen=100, padding='post', truncating='post')
             
