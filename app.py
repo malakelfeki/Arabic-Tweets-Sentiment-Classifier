@@ -46,7 +46,7 @@ def clean_arabic_text(text):
 
 @st.cache_resource
 def load_model_and_artifacts():
-    model = load_model('optimized_hybrid_model.keras')
+    model = load_model('optimized_hybrid_model.keras', compile=False)
     with open('tfidf_vectorizer.pkl', 'rb') as f:
         vectorizer = pickle.load(f)
     with open('sequence_tokenizer.pkl', 'rb') as f:
