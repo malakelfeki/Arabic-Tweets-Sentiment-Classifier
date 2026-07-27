@@ -44,13 +44,42 @@ def clean_arabic_text(text):
     
     return ' '.join(filtered_tokens)
 
+import tensorflow as tf
+from tensorflow.keras.layers import Input, Dense, Embedding, SpatialDropout1D, Bidirectional, LSTM, Concatenate, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.regularizers import l2
+
 @st.cache_resource
 def load_model_and_artifacts():
-    model = load_model('optimized_hybrid_model.keras', compile=False)
+    tfidf_input = Input(shape=(10000,), name="tfidf_input")
+    dense_stat_1 = Dense(128, activation='relu', kernel_regularizer=l2(0.01), name="tfidf_dense_1")(tfidf_input)
+    bn_1 = tf.keras.layers.BatchNormalization(name="bn_1")(dense_stat_1)
+    drop_1 = Dropout(0.4, name="drop_1")(bn_1)
+
+    dense_stat_2 = Dense(64, activation='relu', kernel_regularizer=l2(0.01), name="tfidf_dense_2")(drop_1)
+    bn_2 = tf.keras.layers.BatchNormalization(name="bn_2")(dense_stat_2)
+    drop_2 = Dropout(0.4, name="drop_2")(bn_2)
+
+    seq_input = Input(shape=(100,), name="sequence_input")
+    embedding_layer = Embedding(input_dim=10000, output_dim=200, name="word_embedding")(seq_input)
+    spatial_dropout = SpatialDropout1D(0.2, name="spatial_dropout")(embedding_layer)
+    bilstm_layer = Bidirectional(LSTM(64, return_sequences=False), name="bilstm_context")(spatial_dropout)
+
+    fused_features = Concatenate(name="feature_fusion")([drop_2, bilstm_layer])
+    post_fusion_dense = Dense(64, activation='relu', kernel_regularizer=l2(0.01), name="post_fusion_dense")(fused_features)
+    bn_fusion = tf.keras.layers.BatchNormalization(name="bn_fusion")(post_fusion_dense)
+    drop_fusion = Dropout(0.4, name="drop_fusion")(bn_fusion)
+    output_probability = Dense(1, activation='sigmoid', kernel_regularizer=l2(0.01), name="binary_output")(drop_fusion)
+
+    model = Model(inputs=[tfidf_input, seq_input], outputs=output_probability)
+    
+    model.load_weights('optimized_hybrid_model.keras')
+
     with open('tfidf_vectorizer.pkl', 'rb') as f:
         vectorizer = pickle.load(f)
     with open('sequence_tokenizer.pkl', 'rb') as f:
         tokenizer = pickle.load(f)
+        
     return model, vectorizer, tokenizer
 
 model, vectorizer, tokenizer = load_model_and_artifacts()
