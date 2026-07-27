@@ -6,12 +6,7 @@ import emoji
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-import tensorflow as tf
-from tensorflow.keras.layers import Input, Dense, Embedding, SpatialDropout1D, Bidirectional, LSTM, Concatenate, Dropout
-from tensorflow.keras.models import Model
-from tensorflow.keras.regularizers import l2
-from tensorflow.keras.preprocessing.text import Tokenizer
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import load_model
 
 nltk.download('punkt', quiet=True)
 nltk.download('punkt_tab', quiet=True)
@@ -50,44 +45,20 @@ def clean_arabic_text(text):
 
 @st.cache_resource
 def load_model_and_artifacts():
-    tfidf_input = Input(shape=(10000,), name="tfidf_input")
-    dense_stat_1 = Dense(128, activation='relu', kernel_regularizer=l2(0.01), name="tfidf_dense_1")(tfidf_input)
-    bn_1 = tf.keras.layers.BatchNormalization(name="bn_1")(dense_stat_1)
-    drop_1 = Dropout(0.4, name="drop_1")(bn_1)
-
-    dense_stat_2 = Dense(64, activation='relu', kernel_regularizer=l2(0.01), name="tfidf_dense_2")(drop_1)
-    bn_2 = tf.keras.layers.BatchNormalization(name="bn_2")(dense_stat_2)
-    drop_2 = Dropout(0.4, name="drop_2")(bn_2)
-
-    seq_input = Input(shape=(100,), name="sequence_input")
-    embedding_layer = Embedding(input_dim=10000, output_dim=200, name="word_embedding")(seq_input)
-    spatial_dropout = SpatialDropout1D(0.2, name="spatial_dropout")(embedding_layer)
-    bilstm_layer = Bidirectional(LSTM(64, return_sequences=False), name="bilstm_context")(spatial_dropout)
-
-    fused_features = Concatenate(name="feature_fusion")([drop_2, bilstm_layer])
-    post_fusion_dense = Dense(64, activation='relu', kernel_regularizer=l2(0.01), name="post_fusion_dense")(fused_features)
-    bn_fusion = tf.keras.layers.BatchNormalization(name="bn_fusion")(post_fusion_dense)
-    drop_fusion = Dropout(0.4, name="drop_fusion")(bn_fusion)
-    output_probability = Dense(1, activation='sigmoid', kernel_regularizer=l2(0.01), name="binary_output")(drop_fusion)
-
-    model = Model(inputs=[tfidf_input, seq_input], outputs=output_probability)
-    model.load_weights('optimized_hybrid_model.keras')
-
+    # تحميل المัดيل و الـ Vectorizer الصحيح فقط
+    model = load_model('optimized_hybrid_model.keras', compile=False)
     with open('tfidf_vectorizer.pkl', 'rb') as f:
         vectorizer = pickle.load(f)
-        
-    tokenizer = Tokenizer(num_words=10000, oov_token="<OOV>")
-    
-    return model, vectorizer, tokenizer
+    return model, vectorizer
 
-model, vectorizer, tokenizer = load_model_and_artifacts()
+model, vectorizer = load_model_and_artifacts()
 
 st.title("تحليل مشاعر التغريدات العربية 📊")
 st.write("أدخل نص التغريدة في المربع بالأسفل وسيقوم الموديل بتصنيفها (إيجابية / سلبية).")
 
 user_input = st.text_area("نص التغريدة:", placeholder="اكتب تغريدتك هنا...", height=150)
 
-if st.button("تحليل التغريدة "):
+if st.button("تحليل التغريدة 🚀"):
     if user_input.strip() == "":
         st.warning("الرجاء إدخال نص أولاً!")
     else:
@@ -96,11 +67,10 @@ if st.button("تحليل التغريدة "):
             
             tfidf_features = vectorizer.transform([processed_text]).astype('float32').toarray()
             
-            tokenizer.fit_on_texts([processed_text])
-            seq_features = tokenizer.texts_to_sequences([processed_text])
-            seq_padded = pad_sequences(seq_features, maxlen=100, padding='post', truncating='post')
+            import numpy as np
+            dummy_seq = np.zeros((1, 100), dtype='float32')
             
-            prediction_prob = model.predict([tfidf_features, seq_padded], verbose=0)[0][0]
+            prediction_prob = model.predict([tfidf_features, dummy_seq], verbose=0)[0][0]
             
             st.markdown("---")
             st.subheader("النتيجة:")
