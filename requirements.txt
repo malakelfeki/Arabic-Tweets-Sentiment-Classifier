@@ -1,11 +1,6 @@
 streamlit
-
-tensorflow
-
+tensorflow==2.15.0
 scikit-learn
-
 emoji
-
 nltk
-
 pandas
